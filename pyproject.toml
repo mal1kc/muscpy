@@ -1,0 +1,20 @@
+[tool.poetry]
+name = "muscpy"
+version = "0.1.0"
+description = "discord bot for use youtube-audio-stream"
+authors = ["mal1kc"]
+license = "MIT LICENCE"
+package-mode = false
+
+[tool.poetry.dependencies]
+python = "^3.12"
+"discord.py" = {extras = ["voice"], version = "^2.4"}
+yt-dlp = "^2024.7.25"
+cogwatch = "^3.3.1"
+
+[tool.poetry.group.dev.dependencies]
+ruff = "^0.5.4"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
