@@ -1,6 +1,5 @@
 import asyncio
-from collections.abc import AsyncIterator, Callable
-from typing import Any
+from collections.abc import AsyncIterator
 import discord
 
 from yt_dlp_streamer import YTDLHandler
@@ -73,7 +72,7 @@ async def join_vc(interaction: discord.Interaction, channel: discord.VoiceChanne
             if interaction.user.voice is None:
                 await interaction.response.send_message("You are not connected to a voice channel.")
                 return None
-            channel = interaction.user.voice.channel
+            channel = interaction.user.voice.channel # type: ignore
     
     if not isinstance(channel, discord.VoiceChannel):
         await interaction.response.send_message("Please provide a valid voice channel.")
@@ -181,12 +180,12 @@ class Music(commands.Cog):
         """
         if await not_guild_response(interaction):
             return None
-        if interaction.guild.voice_client is not None:
-            await interaction.guild.voice_client.disconnect(force=False)
+        if interaction.guild.voice_client: # type: ignore
+            await interaction.guild.voice_client.disconnect(force=False) # type: ignore
         await interaction.response.send_message("Left voice channel")
 
     @group.command(name="play", description="Play a song")
-    async def play(self, interaction: discord.Interaction, url: str) -> None:
+    async def play(self, interaction: discord.Interaction, url: str|None) -> None:
         """
         Plays a song.
 
@@ -194,8 +193,8 @@ class Music(commands.Cog):
         ----------
         interaction : discord.Interaction
             The interaction object.
-        url : str
-            The URL of the song to play.
+        url : str | None
+            The URL of the song to play. If None it will try to play the song from the queue.
         """
         if await not_guild_response(interaction):
             return None
@@ -213,7 +212,7 @@ class Music(commands.Cog):
 
         # Send the "searching" message
         await interaction.response.defer()
-        if str(interaction.guild.id) not in self.music_handler_pool:
+        if str(interaction.guild.id) not in self.music_handler_pool: # type: ignore
             print("play command before YTDL_Player")
             if voice_client is None:
                 await interaction.followup.send("I'm not connected to a voice channel.")
@@ -231,7 +230,8 @@ class Music(commands.Cog):
         try:
             await interaction.followup.send("Searching for the song...")
             await music_controller.play(interaction=interaction, url=url)
-            await interaction.followup.send(f"Now playing: {url}")
+            await interaction.response.edit_message(content=f"Added to queue {url}")
+            await music_controller.show_queue(interaction,is_followup=True)
         except Exception as e:
             await interaction.followup.send(f"An error occurred: {e}")
             return
@@ -393,8 +393,44 @@ class Music(commands.Cog):
         if voice_ch is None or voice_cl is None:
             return None
         return voice_ch , voice_cl
+    
+    @group.command(name="queue", description="Get the current queue")
+    async def queue(self, interaction: discord.Interaction) -> None:
+        """
+        Gets the current queue.
 
-    async def ensure_voice(self, interaction: discord.Interaction, voice_ch: VoiceChannel | None = None, quiet: bool = True) -> tuple[VoiceChannel,VoiceProtocol] | tuple[None,None]:
+        Parameters
+        ----------
+        interaction : discord.Interaction
+            The interaction object.
+        """
+        if await not_guild_response(interaction):
+            return None
+        if str(interaction.guild.id) not in self.music_handler_pool:
+            await interaction.response.send_message("I'm not playing anything.")
+            return
+        music_controller = self.music_handler_pool[str(interaction.guild.id)]
+        await music_controller.show_queue(interaction)
+
+    @group.command(name="clear", description="Clear the current queue")
+    async def clear(self, interaction: discord.Interaction) -> None:
+        """
+        Clears the current queue.
+
+        Parameters
+        ----------
+        interaction : discord.Interaction
+            The interaction object.
+        """
+        if await not_guild_response(interaction):
+            return None
+        if str(interaction.guild.id) not in self.music_handler_pool:
+            await interaction.response.send_message("I'm not playing anything.")
+            return
+        music_controller = self.music_handler_pool[str(interaction.guild.id)]
+        await music_controller.clear_queue(interaction)
+
+    async def ensure_voice(self, interaction: discord.Interaction, voice_ch: VoiceChannel | None = None, quiet: bool = True) -> tuple[VoiceChannel,VoiceClient] | tuple[None,None]:
         """
         Ensures the bot is connected to a user's voice channel or specified voice channel.
 
@@ -415,7 +451,7 @@ class Music(commands.Cog):
         if voice_ch is None:
             if isinstance(interaction.user, Member):
                 if isinstance(interaction.user.voice, VoiceState):
-                    voice_ch = interaction.user.voice.channel
+                    voice_ch = interaction.user.voice.channel # type: ignore
 
         if voice_ch is None:
             if not quiet:
@@ -429,7 +465,7 @@ class Music(commands.Cog):
         if interaction.guild.voice_client is not None and interaction.guild.voice_client.channel == voice_ch:
             if not quiet:
                 await interaction.response.send_message(f"Already connected to {voice_ch.name}")
-            return voice_ch , interaction.guild.voice_client
+            return voice_ch , interaction.guild.voice_client # type: ignore
         try:
             voice_client = await voice_ch.connect()
             if not quiet:

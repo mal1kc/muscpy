@@ -163,3 +163,5 @@ cython_debug/
 .envrc
 
 bkup
+
+data.json
