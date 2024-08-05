@@ -1,6 +1,5 @@
 import asyncio
 from collections.abc import AsyncIterator
-from pprint import pprint
 
 import discord
 from discord import (Member, VoiceChannel, VoiceClient, VoiceProtocol,
@@ -8,8 +7,8 @@ from discord import (Member, VoiceChannel, VoiceClient, VoiceProtocol,
 from discord.ext import commands
 
 from load_env import get_all_envs  # for bot token
-from utils import MusicHandlerPool, get_voice_client, not_guild
-from yt_dlp_streamer import YTDLHandler
+from utils import SharedDict, get_voice_client, not_guild
+from yt_dlp_streamer import Track, YTDLHandler
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -17,7 +16,7 @@ intents.message_content = True
 class MusicBot(commands.Bot):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.musicHandlerPool : MusicHandlerPool[str, YTDLHandler] = MusicHandlerPool()
+        self.musicHandlerPool : SharedDict[str, YTDLHandler] = SharedDict()
 
 bot = MusicBot(
     command_prefix=commands.when_mentioned_or("!"),
@@ -214,7 +213,7 @@ class Manage(commands.Cog):
 ###########
 
 @bot.tree.command(name="play", description="Play a song from url or search or resume the current song")
-async def play_cmd(interaction: discord.Interaction, query: str|None = None
+async def play_cmd(interaction: discord.Interaction, query_or_url: str|None = None
                ,voice_ch: discord.VoiceChannel|None = None) -> None:
     """
     Plays a song.
@@ -223,16 +222,16 @@ async def play_cmd(interaction: discord.Interaction, query: str|None = None
     ----------
     interaction : discord.Interaction
         The interaction object.
-    url : str | None
-        The URL of the song to play. If None it will try to play the song from the queue.
+    query_or_url : str | None
+        The query to search for or the URL of the song to play. If None, it will resume the current song.
     voice_ch : discord.VoiceChannel | None
         The voice channel to connect to if not specified it will try to connect to the voice channel of the user who invoked the command.
     """
-    return await play(interaction, query=query, voice_ch=voice_ch)
+    return await play(interaction, query_or_url=query_or_url, voice_ch=voice_ch)
 
 
 
-async def play(interaction: discord.Interaction, query: str|None = None
+async def play(interaction: discord.Interaction, query_or_url: str|None = None
                ,voice_ch: discord.VoiceChannel|None = None,edit_msg:bool=False) -> None:
     if await not_guild(interaction):
         return None
@@ -247,10 +246,10 @@ async def play(interaction: discord.Interaction, query: str|None = None
         return None
     
     guild_music_hndlr = await bot.musicHandlerPool.get(guild_id)
-    query = query.strip() if query is not None else None
+    query_or_url = query_or_url.strip() if query_or_url is not None else None
     
     #
-    if query is None or query == "":
+    if query_or_url is None or query_or_url == "":
         if guild_music_hndlr is not None:
             await guild_music_hndlr.resume(interaction=interaction)
         else:
@@ -276,7 +275,7 @@ async def play(interaction: discord.Interaction, query: str|None = None
 
     # from now on we edit the message instead responding
     try:
-        await guild_music_hndlr.play(interaction=interaction, query=query)
+        await guild_music_hndlr.play(interaction=interaction, query_or_url=query_or_url)
     except Exception as e:
         print(e)
         await interaction.response.edit_message(content="Error playing the song")

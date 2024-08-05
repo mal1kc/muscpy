@@ -6,7 +6,7 @@ import discord
 pool_K = TypeVar('pool_K')
 pool_V = TypeVar('pool_V')
 
-class MusicHandlerPool(Generic[pool_K, pool_V]):
+class SharedDict(Generic[pool_K, pool_V]):
     def __init__(self):
         self._lock = asyncio.Lock()
         self._pool : dict[pool_K, pool_V] = {}
@@ -23,6 +23,58 @@ class MusicHandlerPool(Generic[pool_K, pool_V]):
         async with self._lock:
             if key in self._pool:
                 del self._pool[key]
+
+
+class SharedList(Generic[pool_V]):
+    def __init__(self) -> None:
+        super().__init__()
+        self._lock = asyncio.Lock()
+        self._pool : list[pool_V] = []
+
+    def __getitem__(self, index:int) -> pool_V | None:
+        return asyncio.run(self.get(index))
+    
+    def __setitem__(self, index:int, value:pool_V):
+        asyncio.run(self.set(index, value))
+    
+    def __delitem__(self, index:int):
+        asyncio.run(self.pop(index))
+
+    def __len__(self) -> int:
+        return len(self._pool)
+    
+    def __iter__(self):
+        return iter(self._pool)
+
+    async def get(self, index:int) -> pool_V | None:
+        async with self._lock:
+            try:
+                return self._pool[index]
+            except IndexError:
+                return None
+        
+    async def set(self, index:int, value:pool_V):
+        async with self._lock:
+            self._pool[index] = value
+
+    async def append(self, value:pool_V):
+        async with self._lock:
+            self._pool.append(value)
+
+    async def remove(self, value:pool_V):
+        async with self._lock:
+            self._pool.remove(value)
+
+    async def pop(self, index:int) -> pool_V | None:
+        async with self._lock:
+            try:
+                return self._pool.pop(index)
+            except IndexError:
+                return None
+    
+    async def clear(self):
+        async with self._lock:
+            self._pool.clear()
 
 
 
