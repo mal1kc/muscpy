@@ -9,9 +9,8 @@ dependencies = [
     "yt-dlp>=2024.8.6",
     "discord-py[voice]>=2.4.0",
 ]
-readme = "README.md"
-license = "MIT LICENCE"
-requires-python = ">= 3.8"
+readme = "readme.md"
+requires-python = ">= 3.12"
 
 [build-system]
 requires = ["hatchling"]
@@ -30,6 +29,7 @@ allow-direct-references = true
 packages = ["src/muscpy"]
 
 # [tool.poetry]
+# license = "MIT LICENCE"
 # name = "muscpy"
 # version = "0.5.0"
 # authors = ["mal1kc"]
