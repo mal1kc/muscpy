@@ -1,20 +1,49 @@
-[tool.poetry]
+[project]
 name = "muscpy"
-version = "0.1.0"
+version = "0.5.0"
 description = "discord bot for use youtube-audio-stream"
-authors = ["mal1kc"]
+authors = [
+    { name = "mal1kc" }
+]
+dependencies = [
+    "yt-dlp>=2024.8.6",
+    "discord-py[voice]>=2.4.0",
+]
+readme = "README.md"
 license = "MIT LICENCE"
-package-mode = false
-
-[tool.poetry.dependencies]
-python = "^3.12"
-"discord.py" = {extras = ["voice"], version = "^2.4"}
-yt-dlp = "^2024.7.25"
-cogwatch = "^3.3.1"
-
-[tool.poetry.group.dev.dependencies]
-ruff = "^0.5.4"
+requires-python = ">= 3.8"
 
 [build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.rye]
+managed = true
+dev-dependencies = [
+    "ruff>=0.5"
+]
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/muscpy"]
+
+# [tool.poetry]
+# name = "muscpy"
+# version = "0.5.0"
+# authors = ["mal1kc"]
+# license = "MIT LICENCE"
+# package-mode = false
+#
+# [tool.poetry.dependencies]
+# python = "^3.12"
+# "discord.py" = {extras = ["voice"], version = "^2.4"}
+# yt-dlp = "^2024.7.25"
+#
+# [tool.poetry.group.dev.dependencies]
+# ruff = "^0.5.4"
+#
+# [build-system]
+# requires = ["poetry-core"]
+# build-backend = "poetry.core.masonry.api"
