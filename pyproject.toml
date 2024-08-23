@@ -1,6 +1,6 @@
 [project]
 name = "muscpy"
-version = "0.5.0"
+version = "0.6.0"
 description = "discord bot for use youtube-audio-stream"
 authors = [
     { name = "mal1kc" }

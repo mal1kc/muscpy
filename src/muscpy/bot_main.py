@@ -15,6 +15,7 @@ from discord.abc import Connectable
 from discord.ext import commands
 from discord.shard import EventItem
 
+from muscpy.idle_checker import IdleChecker
 from muscpy.load_env import get_all_envs  # for bot token
 from muscpy.utils import SharedDict, get_voice_client, not_guild
 from muscpy.yt_dlp_streamer import YTDLHandler
@@ -39,6 +40,7 @@ class MusicBot(commands.Bot):
             **kwargs,
         )
         self.musicHandlerPool: SharedDict[str, YTDLHandler] = SharedDict()
+        self.idleChecker = IdleChecker()
 
 
 bot = MusicBot(
@@ -78,7 +80,6 @@ async def ping(interaction: discord.Interaction) -> None:
 async def join_vc(
     interaction: discord.Interaction,
     channel: discord.VoiceChannel | None,
-    quiet: bool = False,
 ) -> tuple[VoiceChannel | Connectable, VoiceProtocol] | None:
     if await not_guild(interaction):
         return None
@@ -102,6 +103,12 @@ async def join_vc(
 
     if interaction.guild.voice_client is not None:
         if interaction.guild.voice_client.channel == channel:
+            if isinstance(interaction.channel, discord.TextChannel):
+                await bot.idleChecker.init_idle_state_for_client(
+                    str(interaction.guild.id),
+                    interaction.guild.voice_client,
+                    interaction.channel,
+                )
             return (
                 interaction.guild.voice_client.channel,
                 interaction.guild.voice_client,
@@ -112,6 +119,12 @@ async def join_vc(
     try:
         voice_client = await channel.connect()
         await interaction.response.send_message(f"Joined {channel.name}")
+        if isinstance(interaction.channel, discord.TextChannel):
+            await bot.idleChecker.init_idle_state_for_client(
+                str(interaction.guild.id),
+                voice_client,
+                interaction.channel,
+            )
         return channel, voice_client
     except discord.errors.ClientException:
         await interaction.response.send_message(
@@ -160,6 +173,7 @@ async def leave(interaction: discord.Interaction) -> None:
         return
     if interaction.guild.voice_client is not None:
         await interaction.guild.voice_client.disconnect(force=False)
+    await bot.idleChecker.deinit_idlestate_of_client(guild_id=str(interaction.guild.id))
     await interaction.response.send_message("Left voice channel")
 
 
@@ -322,6 +336,13 @@ async def play(
             content="I have issues connecting to the voice channel"
         )
         return None
+
+    if isinstance(interaction.channel, discord.TextChannel):
+        await bot.idleChecker.init_idle_state_for_client(
+            guild_id,
+            voice_client,
+            interaction.channel,
+        )
 
     guild_music_hndlr = await bot.musicHandlerPool.get(guild_id)
     query_or_url = query_or_url.strip() if query_or_url is not None else None
@@ -528,6 +549,11 @@ async def on_ready():
     print(bot_commands)
     print("------")
 
+    game = discord.Game("with the variables and processes")
+    await bot.change_presence(status=discord.Status.idle, activity=game)
+
+    await bot.idleChecker.run_idle_loop()
+
 
 @bot.event
 async def on_error(event: EventItem, *args: Iterable[Any], **kwargs: dict[Any, Any]):
@@ -536,8 +562,6 @@ async def on_error(event: EventItem, *args: Iterable[Any], **kwargs: dict[Any, A
 
 async def main():
     bot_token = get_all_envs(".env")["BOT_TOKEN"]
-    # activity_game = discord.Game(name="cool music")
-    # activty = discord.Activity(status=discord.Status.idle, type=discord.ActivityType.playing, name="cool music")
     async with bot:
         await bot.add_cog(Manage(bot))
         await bot.start(bot_token)
