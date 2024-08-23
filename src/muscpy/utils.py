@@ -1,4 +1,5 @@
 import asyncio
+from collections.abc import AsyncIterator
 from typing import Generic, TypeVar
 
 import discord
@@ -8,7 +9,7 @@ pool_V = TypeVar("pool_V")
 
 
 class SharedDict(Generic[pool_K, pool_V]):
-    def __init__(self):
+    def __init__(self) -> None:
         self._lock = asyncio.Lock()
         self._pool: dict[pool_K, pool_V] = {}
 
@@ -16,14 +17,19 @@ class SharedDict(Generic[pool_K, pool_V]):
         async with self._lock:
             return self._pool.get(key)
 
-    async def set(self, key: pool_K, value: pool_V):
+    async def set(self, key: pool_K, value: pool_V) -> None:
         async with self._lock:
             self._pool[key] = value
 
-    async def delete(self, key: pool_K):
+    async def delete(self, key: pool_K) -> None:
         async with self._lock:
             if key in self._pool:
                 del self._pool[key]
+
+    async def items(self) -> AsyncIterator[tuple[pool_K, pool_V]]:
+        async with self._lock:
+            for key, value in self._pool.items():
+                yield (key, value)
 
 
 class SharedList(Generic[pool_V]):
