@@ -33,7 +33,7 @@ from yt_dlp.utils.networking import random_user_agent
 class PlayButton(discord.ui.Button["PlayButtonView"]):
     def __init__(self, ytdl_handler: YTDLHandler, track: Track, indx: int = 0):
         super().__init__(
-            label=str(int),
+            label=str(indx),
             style=discord.ButtonStyle.primary,
         )
 
@@ -65,10 +65,10 @@ class PlayButtonView(discord.ui.View):
         self.trk_list: list[str] = []
 
         for indx, track in enumerate(tracks, 0):
-            _ = self.add_item(PlayButton(ytdl_handler, track, indx))
             _ = self.trk_list.append(
                 f"{indx}. " + track.title[:70] if track.title else "Unknown Title"
             )
+            _ = self.add_item(PlayButton(ytdl_handler, track, indx))
 
 
 ytdl_headers["User-Agent"] = random_user_agent()
