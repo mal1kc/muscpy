@@ -369,7 +369,7 @@ async def play(
     #
 
     #
-    await interaction.response.defer()
+    await interaction.response.defer(ephemeral=True)
 
     if guild_music_hndlr is None:
         try:
