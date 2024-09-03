@@ -61,7 +61,7 @@ async def echo(interaction: discord.Interaction, message: str) -> None:
     message : str
         The message to echo.
     """
-    await interaction.response.send_message(message)
+    await interaction.response.send_message(message, ephemeral=True)
 
 
 @bot.tree.command()
@@ -88,17 +88,21 @@ async def join_vc(
         if isinstance(interaction.user, Member):
             if interaction.user.voice is None:
                 await interaction.response.send_message(
-                    "You are not connected to a voice channel."
+                    "You are not connected to a voice channel.", ephemeral=True
                 )
                 return None
             if isinstance(interaction.user.voice.channel, VoiceChannel):
                 channel = interaction.user.voice.channel
 
     if not isinstance(channel, discord.VoiceChannel):
-        await interaction.response.send_message("Please provide a valid voice channel.")
+        await interaction.response.send_message(
+            "Please provide a valid voice channel.", ephemeral=True
+        )
         return None
     if interaction.guild is None:
-        await interaction.response.send_message("Bot currently only supports guilds")
+        await interaction.response.send_message(
+            "Bot currently only supports guilds", ephemeral=True
+        )
         return None
 
     if interaction.guild.voice_client is not None:
@@ -118,7 +122,9 @@ async def join_vc(
 
     try:
         voice_client = await channel.connect()
-        await interaction.response.send_message(f"Joined {channel.name}")
+        await interaction.response.send_message(
+            f"Joined {channel.name}", ephemeral=True
+        )
         if isinstance(interaction.channel, discord.TextChannel):
             await bot.idleChecker.init_idle_state_for_client(
                 str(interaction.guild.id),
@@ -128,16 +134,18 @@ async def join_vc(
         return channel, voice_client
     except discord.errors.ClientException:
         await interaction.response.send_message(
-            "I'm already connected to a voice channel."
+            "I'm already connected to a voice channel.", ephemeral=True
         )
         return None
     except discord.errors.Forbidden:
         await interaction.response.send_message(
-            "I don't have permission to join the voice channel."
+            "I don't have permission to join the voice channel.", ephemeral=True
         )
         return None
     except Exception as e:
-        await interaction.response.send_message(f"An error occurred: {e}")
+        await interaction.response.send_message(
+            f"An error occurred: {e}", ephemeral=True
+        )
         return None
 
 
@@ -174,7 +182,7 @@ async def leave(interaction: discord.Interaction) -> None:
     if interaction.guild.voice_client is not None:
         await interaction.guild.voice_client.disconnect(force=False)
     await bot.idleChecker.deinit_idlestate_of_client(guild_id=str(interaction.guild.id))
-    await interaction.response.send_message("Left voice channel")
+    await interaction.response.send_message("Left voice channel", ephemeral=True)
 
 
 @bot.tree.command()
@@ -199,7 +207,7 @@ async def help(interaction: discord.Interaction) -> None:
         embed = embed.add_field(
             name=command.name, value=command.description, inline=False
         )
-    await interaction.response.send_message(embed=embed)
+    await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
 @bot.tree.command(
@@ -252,7 +260,7 @@ class Manage(commands.Cog):
         """
 
         await interaction.response.send_message(
-            "I am trying to delete messages of this channel ..."
+            "I am trying to delete messages of this channel ...", ephemeral=True
         )
 
         if not isinstance(interaction.channel, discord.TextChannel):
@@ -330,7 +338,7 @@ async def play(
     if voice_client is None:
         if not edit_msg:
             await interaction.response.send_message(
-                "I have issues connecting to the voice channel"
+                "I have issues connecting to the voice channel", ephemeral=True
             )
         await interaction.response.edit_message(
             content="I have issues connecting to the voice channel"
@@ -353,7 +361,9 @@ async def play(
             await guild_music_hndlr.resume(interaction=interaction)
         else:
             if not edit_msg:
-                await interaction.response.send_message("Nothing to play")
+                await interaction.response.send_message(
+                    "Nothing to play", ephemeral=True
+                )
             await interaction.response.edit_message(content="Nothing to play")
         return None
     #
@@ -367,7 +377,7 @@ async def play(
         except Exception:
             if not edit_msg:
                 await interaction.response.send_message(
-                    "Error initializing music handler"
+                    "Error initializing music handler", ephemeral=True
                 )
             await interaction.response.edit_message(
                 content="Error initializing music handler"
@@ -394,7 +404,7 @@ async def stop(interaction: discord.Interaction) -> None:
 
     guild_music_hndlr = await bot.musicHandlerPool.get(guild_id)
     if guild_music_hndlr is None:
-        await interaction.response.send_message("Nothing to stop")
+        await interaction.response.send_message("Nothing to stop", ephemeral=True)
         return
     await guild_music_hndlr.stop(interaction=interaction)
 
@@ -422,7 +432,7 @@ async def resume(interaction: discord.Interaction) -> None:
     guild_music_hndlr = await bot.musicHandlerPool.get(guild_id)
 
     if guild_music_hndlr is None:
-        await interaction.response.send_message("Nothing to resume")
+        await interaction.response.send_message("Nothing to resume", ephemeral=True)
         return
     await guild_music_hndlr.resume(interaction=interaction)
 
@@ -447,7 +457,7 @@ async def skip(interaction: discord.Interaction, count: int | None) -> None:
     guild_music_hndlr = await bot.musicHandlerPool.get(guild_id)
 
     if guild_music_hndlr is None:
-        await interaction.response.send_message("Nothing to skip")
+        await interaction.response.send_message("Nothing to skip", ephemeral=True)
         return
     await guild_music_hndlr.skip(interaction=interaction, count=count)
 
@@ -460,10 +470,10 @@ async def set_loop(interaction: discord.Interaction, loop: bool) -> None:
     guild_music_hndlr = await bot.musicHandlerPool.get(guild_id)
 
     if guild_music_hndlr is None:
-        await interaction.response.send_message("Nothing to set loop")
+        await interaction.response.send_message("Nothing to set loop", ephemeral=True)
         return
     guild_music_hndlr.loop = loop
-    await interaction.response.send_message(f"Loop set to {loop}")
+    await interaction.response.send_message(f"Loop set to {loop}", ephemeral=True)
 
 
 @bot.tree.command(name="loop", description="loop the current song")
@@ -485,7 +495,7 @@ async def queue(interaction: discord.Interaction) -> None:
     guild_music_hndlr = await bot.musicHandlerPool.get(guild_id)
 
     if guild_music_hndlr is None:
-        await interaction.response.send_message("Nothing in the queue")
+        await interaction.response.send_message("Nothing in the queue", ephemeral=True)
         return
     await guild_music_hndlr.show_queue(interaction=interaction)
 
@@ -517,7 +527,7 @@ async def status(interaction: discord.Interaction) -> None:
     guild_music_hndlr = await bot.musicHandlerPool.get(guild_id)
 
     if guild_music_hndlr is None:
-        await interaction.response.send_message("Nothing to show")
+        await interaction.response.send_message("Nothing to show", ephemeral=True)
         return
     await guild_music_hndlr.status(interaction=interaction)
 
@@ -531,7 +541,7 @@ async def clear(interaction: discord.Interaction) -> None:
     guild_music_hndlr = await bot.musicHandlerPool.get(guild_id)
 
     if guild_music_hndlr is None:
-        await interaction.response.send_message("Nothing to clear")
+        await interaction.response.send_message("Nothing to clear", ephemeral=True)
         return
     await guild_music_hndlr.clear_queue(interaction=interaction)
 
