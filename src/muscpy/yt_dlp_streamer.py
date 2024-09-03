@@ -31,11 +31,9 @@ from yt_dlp.utils.networking import random_user_agent
 
 
 class PlayButton(discord.ui.Button["PlayButtonView"]):
-    def __init__(self, ytdl_handler: YTDLHandler, track: Track):
+    def __init__(self, ytdl_handler: YTDLHandler, track: Track, indx: int = 0):
         super().__init__(
-            label=track.title[:40] + "..."
-            if track.title and len(track.title) > 80
-            else track.title or "Unkown",
+            label=str(int),
             style=discord.ButtonStyle.primary,
         )
 
@@ -47,12 +45,13 @@ class PlayButton(discord.ui.Button["PlayButtonView"]):
     async def callback(self, interaction: discord.Interaction):
         await interaction.response.send_message(
             f"from_query Playing: {self.track.title[:40] if self.track.title else "unknown"} \nurl: {self.track.original_url}",
-            ephemeral=False,
+            ephemeral=True,
         )
 
         if not hasattr(self.ytdl_handler, "handle_track"):
             await interaction.response.send_message(
-                "Internal error: Handler does not have handle_track method"
+                "Internal error: Handler does not have handle_track method",
+                ephemeral=True,
             )
 
         await self.ytdl_handler.handle_track(interaction, self.track)
@@ -63,9 +62,13 @@ class PlayButtonView(discord.ui.View):
         super().__init__()
 
         self.tracks = tracks
+        self.trk_list: list[str] = []
 
-        for track in tracks:
-            _ = self.add_item(PlayButton(ytdl_handler, track))
+        for indx, track in enumerate(tracks, 0):
+            _ = self.add_item(PlayButton(ytdl_handler, track, indx))
+            _ = self.trk_list.append(
+                f"{indx}. " + track.title[:70] if track.title else "Unknown Title"
+            )
 
 
 ytdl_headers["User-Agent"] = random_user_agent()
@@ -388,7 +391,7 @@ class YTDLHandler:
             if isinstance(data, dict):
                 new_url = data.get("url", None)
                 if new_url:
-                    if "Unkown" in new_url:
+                    if "Unknown" in new_url:
                         raise NotImplementedError("f")
                     if isinstance(new_url, str):
                         return new_url
@@ -400,8 +403,9 @@ class YTDLHandler:
 
         if tracks:
             view = PlayButtonView(ytdl_handler=self, tracks=filter(None, tracks))
+            content = "\n".join(view.trk_list)
 
-            await interaction.edit_original_response(view=view)
+            await interaction.edit_original_response(content=content, view=view)
         else:
             await interaction.edit_original_response(content="No results found.")
 
@@ -413,7 +417,8 @@ class YTDLHandler:
         await self.queue.append(track)
         try:
             await interaction.response.send_message(
-                content=f"Added to queue: {track.title} now queue has {len(self.queue)} tracks"
+                content=f"Added to queue: {track.title} now queue has {len(self.queue)} tracks",
+                ephemeral=True,
             )
 
         except discord.errors.InteractionResponded:
@@ -578,12 +583,14 @@ class YTDLHandler:
 
             if self.active_track:
                 await interaction.response.send_message(
-                    f"Paused: {self.active_track.title}"
+                    f"Paused: {self.active_track.title}", ephemeral=True
                 )
             else:
-                await interaction.response.send_message("Paused Queue")
+                await interaction.response.send_message("Paused Queue", ephemeral=True)
         else:
-            await interaction.response.send_message("Player is not playing.")
+            await interaction.response.send_message(
+                "Player is not playing.", ephemeral=True
+            )
 
     async def resume(self, interaction: discord.Interaction):
         if self.voice_client.is_paused() or self.paused:  # pyright: ignore[reportAttributeAccessIssue]
@@ -593,12 +600,14 @@ class YTDLHandler:
 
             if self.active_track:
                 await interaction.response.send_message(
-                    f"Resumed: {self.active_track.title}"
+                    f"Resumed: {self.active_track.title}", ephemeral=True
                 )
             else:
                 await interaction.response.send_message("Resumed Queue")
         else:
-            await interaction.response.send_message("Player is not paused.")
+            await interaction.response.send_message(
+                "Player is not paused.", ephemeral=True
+            )
 
     async def stop(self, interaction: discord.Interaction):
         if self.voice_client.is_playing() or self.voice_client.is_paused():  # pyright: ignore[reportAttributeAccessIssue]
@@ -610,9 +619,11 @@ class YTDLHandler:
 
             self.active_track = None
 
-            await interaction.response.send_message("Stopped")
+            await interaction.response.send_message("Stopped", ephemeral=True)
         else:
-            await interaction.response.send_message("Player is not playing.")
+            await interaction.response.send_message(
+                "Player is not playing.", ephemeral=True
+            )
 
     async def skip(self, interaction: discord.Interaction, count: int | None):
         if self.voice_client.is_playing():  # pyright: ignore[reportAttributeAccessIssue]
@@ -628,7 +639,9 @@ class YTDLHandler:
                         else trk_title
                     )
 
-                await interaction.response.send_message("Skipped: " + trk_title)
+                await interaction.response.send_message(
+                    "Skipped: " + trk_title, ephemeral=True
+                )
             else:
                 trk_titles: list[str] = []
 
@@ -639,22 +652,25 @@ class YTDLHandler:
                 for indx in element_range:
                     skipped_trk = await self.queue.pop(indx)
                     if skipped_trk:
-                        trk_titles.append(f"{indx}. {skipped_trk.title or 'Unkown'}")
+                        trk_titles.append(f"{indx}. {skipped_trk.title or 'Unknown'}")
 
                 await interaction.response.send_message(
                     f"first {count} items skipped from queuee \n"
-                    + "\n".join(trk_titles)
+                    + "\n".join(trk_titles),
+                    ephemeral=True,
                 )
 
             await self.play(interaction=interaction)
         else:
-            await interaction.response.send_message("Player is not playing.")
+            await interaction.response.send_message(
+                "Player is not playing.", ephemeral=True
+            )
 
     async def set_loop(self, interaction: discord.Interaction, loop: bool):
         self.loop = loop
 
         await interaction.response.send_message(
-            f"Looping is {'enabled' if loop else 'disabled'}."
+            f"Looping is {'enabled' if loop else 'disabled'}.", ephemeral=True
         )
 
     async def disconnect(self, interaction: discord.Interaction):
@@ -682,7 +698,7 @@ class YTDLHandler:
         else:
             embed_msg = embed_msg.add_field(name="Currently playing", value="Nothing")
 
-        await interaction.response.send_message(embed=embed_msg)
+        await interaction.response.send_message(embed=embed_msg, ephemeral=True)
 
     async def show_queue(
         self, interaction: discord.Interaction, is_followup: bool = False
@@ -706,9 +722,9 @@ class YTDLHandler:
             await interaction.followup.send(embed=embed)
             return
 
-        await interaction.response.send_message(embed=embed)
+        await interaction.response.send_message(embed=embed, ephemeral=True)
 
     async def clear_queue(self, interaction: discord.Interaction) -> None:
         await self.queue.clear()
 
-        await interaction.response.send_message("Queue cleared.")
+        await interaction.response.send_message("Queue cleared.", ephemeral=True)
