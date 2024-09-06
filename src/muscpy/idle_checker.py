@@ -3,6 +3,7 @@ from dataclasses import dataclass
 import discord
 from muscpy.utils import SharedDict
 from muscpy.config import IDLE_CHECK_TIMEOUT, IDLE_TIMEOUT
+from muscpy.yt_dlp_streamer import YTDLHandler
 
 
 @dataclass
@@ -10,6 +11,7 @@ class GuildTimerData:
     timeout: float
     voice_client: discord.VoiceClient | discord.VoiceProtocol | None
     text_channel: discord.TextChannel
+    music_handler: YTDLHandler | None
 
 
 class IdleChecker:
@@ -21,6 +23,7 @@ class IdleChecker:
         guild_id: str,
         voice_client: discord.VoiceClient | discord.VoiceProtocol,
         text_channel: discord.TextChannel,
+        music_handler: YTDLHandler | None,
     ):
         """
         Start a new idle timer for the given guild, or reset an existing one.
@@ -37,6 +40,7 @@ class IdleChecker:
                 GuildTimerData(
                     timeout=IDLE_TIMEOUT,
                     voice_client=voice_client,
+                    music_handler=music_handler,
                     text_channel=text_channel,
                 ),
             )
@@ -58,7 +62,12 @@ class IdleChecker:
                         guild_data.timeout = IDLE_TIMEOUT
                     if guild_data.timeout <= 0:
                         # Disconnect from the voice channel
-                        await guild_data.voice_client.disconnect()
+                        # await guild_data.voice_client.disconnect()
+                        if guild_data.music_handler:
+                            await guild_data.music_handler.disconnect()
+                        else:
+                            await guild_data.voice_client.disconnect()
+                            guild_data.voice_client.cleanup()
                         expired_guids.append(guild_id)
                     else:
                         guild_data.timeout -= IDLE_CHECK_TIMEOUT
@@ -66,7 +75,8 @@ class IdleChecker:
                 guild_data = await self._timers.get(guild_id)
                 if guild_data:
                     _ = await guild_data.text_channel.send(
-                        content="disconnected because of idling"
+                        content=f"disconnected because of idling for {IDLE_TIMEOUT / 60} mins",
+                        delete_after=10,
                     )
                 await self._timers.delete(str(guild_id))
             await asyncio.sleep(IDLE_CHECK_TIMEOUT)
