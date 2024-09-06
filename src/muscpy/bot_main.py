@@ -112,6 +112,7 @@ async def join_vc(
                     str(interaction.guild.id),
                     interaction.guild.voice_client,
                     interaction.channel,
+                    None,
                 )
             return (
                 interaction.guild.voice_client.channel,
@@ -127,9 +128,7 @@ async def join_vc(
         )
         if isinstance(interaction.channel, discord.TextChannel):
             await bot.idleChecker.init_idle_state_for_client(
-                str(interaction.guild.id),
-                voice_client,
-                interaction.channel,
+                str(interaction.guild.id), voice_client, interaction.channel, None
             )
         return channel, voice_client
     except discord.errors.ClientException:
@@ -345,30 +344,9 @@ async def play(
         )
         return None
 
-    if isinstance(interaction.channel, discord.TextChannel):
-        await bot.idleChecker.init_idle_state_for_client(
-            guild_id,
-            voice_client,
-            interaction.channel,
-        )
-
     guild_music_hndlr = await bot.musicHandlerPool.get(guild_id)
     query_or_url = query_or_url.strip() if query_or_url is not None else None
 
-    #
-    if query_or_url is None or query_or_url == "":
-        if guild_music_hndlr is not None:
-            await guild_music_hndlr.resume(interaction=interaction)
-        else:
-            if not edit_msg:
-                await interaction.response.send_message(
-                    "Nothing to play", ephemeral=True
-                )
-            await interaction.response.edit_message(content="Nothing to play")
-        return None
-    #
-
-    #
     await interaction.response.defer(ephemeral=True)
 
     if guild_music_hndlr is None:
@@ -384,7 +362,18 @@ async def play(
             )
             return None
         await bot.musicHandlerPool.set(guild_id, guild_music_hndlr)
-    #
+
+    if not guild_music_hndlr.voice_client.is_connected():  # pyright: ignore[reportAttributeAccessIssue,reportUnknownMemberType]
+        guild_music_hndlr.voice_client.cleanup()
+        guild_music_hndlr.voice_client = voice_client
+
+    if isinstance(interaction.channel, discord.TextChannel):
+        await bot.idleChecker.init_idle_state_for_client(
+            guild_id,
+            voice_client,
+            interaction.channel,
+            guild_music_hndlr,
+        )
 
     # from now on we edit the message instead responding
     try:

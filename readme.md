@@ -1,9 +1,10 @@
 # issues
 
-- durations are incorrect format
-- still have issues with queing &  searching resuming \
-    ( add track to que then returns issue with joining voice)
+- durations are incorrect format (can be overtime)
+- have issues related to youtube request limit (not plan to fix them)
 
-## qol issues
+## Qol issues
 
-- double join message
+- have double join_vc message
+- have some unneeded messages
+- have some understandable messages

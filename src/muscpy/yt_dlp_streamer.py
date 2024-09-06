@@ -518,7 +518,9 @@ class YTDLHandler:
             or not self.active_track.fetched
         ):
             if not await self.active_track.fetch():
-                raise NotADirectoryError("should throw some message")
+                await interaction.edit_original_response(
+                    content="have some struggles with youtube"
+                )
 
         self.active_playback = discord.FFmpegPCMAudio(
             self.active_track.data_url,
@@ -539,6 +541,11 @@ class YTDLHandler:
 
         except Exception as e:
             print(f"Failed to play track: {e}")
+            asyncio.run(
+                interaction.edit_original_response(
+                    content="have networking issue retrying"
+                )
+            )
 
             if "http" in str(e):
                 await self.active_track.fetch()
@@ -563,6 +570,11 @@ class YTDLHandler:
 
     def _play_next(self, interaction: discord.Interaction, error):
         if error:
+            asyncio.run(
+                interaction.edit_original_response(
+                    content="probably networking (youtube) issue"
+                )
+            )
             print(f"Player error: {error}")
 
         if self.loop and self.active_track:
@@ -609,7 +621,10 @@ class YTDLHandler:
                 "Player is not paused.", ephemeral=True
             )
 
-    async def stop(self, interaction: discord.Interaction):
+    async def stop(
+        self,
+        interaction: discord.Interaction | None = None,
+    ):
         if self.voice_client.is_playing() or self.voice_client.is_paused():  # pyright: ignore[reportAttributeAccessIssue]
             self.voice_client.stop()  # pyright: ignore[reportAttributeAccessIssue]
 
@@ -618,12 +633,13 @@ class YTDLHandler:
             self.paused = True
 
             self.active_track = None
-
-            await interaction.response.send_message("Stopped", ephemeral=True)
+            if interaction:
+                await interaction.response.send_message("Stopped", ephemeral=True)
         else:
-            await interaction.response.send_message(
-                "Player is not playing.", ephemeral=True
-            )
+            if interaction:
+                await interaction.response.send_message(
+                    "Player is not playing.", ephemeral=True
+                )
 
     async def skip(self, interaction: discord.Interaction, count: int | None):
         if self.voice_client.is_playing():  # pyright: ignore[reportAttributeAccessIssue]
@@ -673,10 +689,11 @@ class YTDLHandler:
             f"Looping is {'enabled' if loop else 'disabled'}.", ephemeral=True
         )
 
-    async def disconnect(self, interaction: discord.Interaction):
+    async def disconnect(self, interaction: discord.Interaction | None = None):
         await self.stop(interaction=interaction)
 
         await self.voice_client.disconnect()
+        self.voice_client.cleanup()
 
     async def status(self, interaction: discord.Interaction):
         embd_title = "Status"
