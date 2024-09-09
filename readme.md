@@ -26,6 +26,7 @@ A Discord music bot powered by Python, FFmpeg, and yt-dlp.
 
 Run the bot from the directory where `pyproject.toml` is located:
 ```bash
+rye sync
 rye run python -m muscpy
 ```
 
@@ -36,19 +37,19 @@ rye run python -m muscpy
    virtualenv .venv
    ```
 2. **Install dependencies**:
-   - **On Linux**:
-     ```bash
-     # Install dependencies
-     ./.venv/bin/pip install -r ./requirements.txt
-     # Install muscpy
-     ./.venv/bin/pip install .
-     ```
    - **On Windows**:
      ```powershell
      # Install dependencies
      .\.venv\Scripts\pip.exe install -r .\requirements.txt
      # Install muscpy
      .\.venv\Scripts\pip.exe install .
+     ```
+   - **On Linux**:
+     ```bash
+     # Install dependencies
+     ./.venv/bin/pip install -r ./requirements.txt
+     # Install muscpy
+     ./.venv/bin/pip install .
      ```
 3. **Run the bot**:
    - **For Windows**:
