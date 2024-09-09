@@ -1,10 +1,72 @@
-# issues
+# muscpy
 
-- durations are incorrect format (can be overtime)
-- have issues related to youtube request limit (not plan to fix them)
+A Discord music bot powered by Python, FFmpeg, and yt-dlp.
 
-## Qol issues
+# ToC
+* [Usage](#usage)
+* [Known Issues](#known-issues)
+* [Quality of Life Issues](#quality-of-life-issues)
 
-- have double join_vc message
-- have some unneeded messages
-- have some understandable messages
+## Usage
+
+1. **Clone the repository** using Git or download it as an archive:
+   ```bash
+   git clone https://github.com/mal1kc/muscpy
+   ```
+
+2. **Set up the `BOT_TOKEN` variable** in the `.env` file.  
+   Example `.env` file:
+   ```bash
+   BOT_TOKEN="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+   ```
+
+### Starting the Bot
+
+#### Using Rye
+
+Run the bot from the directory where `pyproject.toml` is located:
+```bash
+rye run python -m muscpy
+```
+
+#### Using Virtualenv
+
+1. **Create a virtual environment**:
+   ```bash
+   virtualenv .venv
+   ```
+2. **Install dependencies**:
+   - **On Linux**:
+     ```bash
+     # Install dependencies
+     ./.venv/bin/pip install -r ./requirements.txt
+     # Install muscpy
+     ./.venv/bin/pip install .
+     ```
+   - **On Windows**:
+     ```powershell
+     # Install dependencies
+     .\.venv\Scripts\pip.exe install -r .\requirements.txt
+     # Install muscpy
+     .\.venv\Scripts\pip.exe install .
+     ```
+3. **Run the bot**:
+   - **For Windows**:
+     ```powershell
+     .\.venv\Scripts\python.exe start_muscpy.py
+     ```
+   - **For Linux**:
+     ```bash
+     ./.venv/bin/python start_muscpy.py
+     ```
+## Known Issues
+
+- Durations may be in an incorrect format (can be overtime).
+- Issues related to YouTube request limits (not planned to be fixed).
+
+## Quality of Life Issues
+
+- Double join VC messages.
+- Some unneeded messages.
+- Some messages may be unclear.
+
