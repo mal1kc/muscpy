@@ -28,7 +28,6 @@ cffi==1.17.0
 charset-normalizer==3.3.2
     # via requests
 discord-py==2.4.0
-    # via discord-py
     # via muscpy
 frozenlist==1.4.1
     # via aiohttp
