@@ -9,6 +9,8 @@ A Discord music bot powered by Python, FFmpeg, and yt-dlp.
 
 ## Usage
 
+### by cloning
+
 1. **Clone the repository** using Git or download it as an archive:
    ```bash
    git clone https://github.com/mal1kc/muscpy
@@ -20,9 +22,11 @@ A Discord music bot powered by Python, FFmpeg, and yt-dlp.
    DCBOT_TOKEN="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
    ```
 
-### Starting the Bot
+#### Starting the Bot
 
-#### Using Rye
+ you need to be have ffmpeg in PATH environment variable or where you run app
+
+##### Using Rye
 
 Run the bot from the directory where `pyproject.toml` is located:
 ```bash
@@ -30,7 +34,7 @@ rye sync
 rye run python -m muscpy
 ```
 
-#### Using Virtualenv
+##### Using Virtualenv
 
 1. **Create a virtual environment**:
    ```bash
