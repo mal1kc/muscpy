@@ -17,7 +17,7 @@ A Discord music bot powered by Python, FFmpeg, and yt-dlp.
 2. **Set up the `BOT_TOKEN` variable** in the `.env` file.  
    Example `.env` file:
    ```bash
-   BOT_TOKEN="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+   DCBOT_TOKEN="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
    ```
 
 ### Starting the Bot

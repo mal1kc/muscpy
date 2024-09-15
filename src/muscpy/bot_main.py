@@ -16,7 +16,7 @@ from discord.ext import commands
 from discord.shard import EventItem
 
 from muscpy.idle_checker import IdleChecker
-from muscpy.load_env import get_all_envs  # for bot token
+from muscpy.load_env import get_env
 from muscpy.utils import SharedDict, get_voice_client, not_guild
 from muscpy.yt_dlp_streamer import YTDLHandler
 
@@ -560,7 +560,7 @@ async def on_error(event: EventItem, *args: Iterable[Any], **kwargs: dict[Any, A
 
 
 async def main():
-    bot_token = get_all_envs(".env")["BOT_TOKEN"]
+    bot_token = get_env("DCBOT_TOKEN", ".env")
     async with bot:
         await bot.add_cog(Manage(bot))
         await bot.start(bot_token)
