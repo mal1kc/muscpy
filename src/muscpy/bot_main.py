@@ -1,5 +1,5 @@
 import asyncio
-from collections.abc import AsyncIterator, Iterable
+from collections.abc import Iterable
 from typing import Any
 
 import discord
@@ -41,6 +41,8 @@ class MusicBot(commands.Bot):
         )
         self.musicHandlerPool: SharedDict[str, YTDLHandler] = SharedDict()
         self.idleChecker = IdleChecker()
+        self.idle_task: asyncio.Task[None] | None = None
+        self.tree_synced = False
 
 
 bot = MusicBot(
@@ -74,7 +76,8 @@ async def ping(interaction: discord.Interaction) -> None:
     interaction : discord.Interaction
         The interaction object.
     """
-    await interaction.response.send_message("Pong!" + str(bot.latency) + "ms")
+    # bot.latency is in seconds
+    await interaction.response.send_message(f"Pong! {bot.latency * 1000:.0f}ms")
 
 
 async def join_vc(
@@ -107,6 +110,10 @@ async def join_vc(
 
     if interaction.guild.voice_client is not None:
         if interaction.guild.voice_client.channel == channel:
+            # every interaction must be answered, or Discord shows "did not respond"
+            await interaction.response.send_message(
+                f"Already in {channel.name}", ephemeral=True
+            )
             if isinstance(interaction.channel, discord.TextChannel):
                 await bot.idleChecker.init_idle_state_for_client(
                     str(interaction.guild.id),
@@ -239,7 +246,13 @@ async def ensure_voice_cmd(
 
 
 class Manage(commands.Cog):
-    group = app_commands.Group(name="manage", description="Manage commands")
+    # hidden from / unusable by members without Manage Messages by default
+    group = app_commands.Group(
+        name="manage",
+        description="Manage commands",
+        default_permissions=discord.Permissions(manage_messages=True),
+        guild_only=True,
+    )
 
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
@@ -257,6 +270,18 @@ class Manage(commands.Cog):
         limit : int
             The number of messages to delete.
         """
+
+        # server admins can override default_permissions per channel/role,
+        # so check the caller's real permissions here too
+        if (
+            not isinstance(interaction.user, Member)
+            or not interaction.permissions.manage_messages
+        ):
+            await interaction.response.send_message(
+                "You need the Manage Messages permission to use this.",
+                ephemeral=True,
+            )
+            return
 
         await interaction.response.send_message(
             "I am trying to delete messages of this channel ...", ephemeral=True
@@ -276,13 +301,9 @@ class Manage(commands.Cog):
         if limit < 1:
             limit = 1
 
-        messages: AsyncIterator[discord.Message] = interaction.channel.history(
-            limit=limit
-        )
-        # make it snow flake iterable
-        messages_snfl = [message async for message in messages]
         try:
-            await interaction.channel.delete_messages(messages_snfl)
+            # purge() handles bulk-delete limits (e.g. messages older than 14 days)
+            messages_snfl = await interaction.channel.purge(limit=limit)
             _ = await interaction.edit_original_response(
                 content=f"Deleted {len(messages_snfl)} messages."
             )
@@ -332,14 +353,20 @@ async def play(
         return None
     guild_id = str(interaction.guild_id)  # type: ignore
 
-    voice_client = await get_voice_client(interaction, voice_ch, quiet=True)
+    # Defer before anything slow (voice connect, yt-dlp). After this the
+    # interaction is answered, so only edit_original_response may be used;
+    # response.send_message / response.edit_message would raise InteractionResponded.
+    if not interaction.response.is_done():
+        await interaction.response.defer(ephemeral=True, thinking=True)
+
+    try:
+        voice_client = await get_voice_client(interaction, voice_ch, quiet=True)
+    except Exception as e:
+        print(f"voice connect error: {e!r}")
+        voice_client = None
 
     if voice_client is None:
-        if not edit_msg:
-            await interaction.response.send_message(
-                "I have issues connecting to the voice channel", ephemeral=True
-            )
-        await interaction.response.edit_message(
+        await interaction.edit_original_response(
             content="I have issues connecting to the voice channel"
         )
         return None
@@ -347,17 +374,11 @@ async def play(
     guild_music_hndlr = await bot.musicHandlerPool.get(guild_id)
     query_or_url = query_or_url.strip() if query_or_url is not None else None
 
-    await interaction.response.defer(ephemeral=True)
-
     if guild_music_hndlr is None:
         try:
             guild_music_hndlr = YTDLHandler(bot=bot, voice_client=voice_client)  # type: ignore
         except Exception:
-            if not edit_msg:
-                await interaction.response.send_message(
-                    "Error initializing music handler", ephemeral=True
-                )
-            await interaction.response.edit_message(
+            await interaction.edit_original_response(
                 content="Error initializing music handler"
             )
             return None
@@ -379,8 +400,8 @@ async def play(
     try:
         await guild_music_hndlr.play(interaction=interaction, query_or_url=query_or_url)
     except Exception as e:
-        print(e)
-        await interaction.response.edit_message(content="Error playing the song")
+        print(f"play error: {e!r}")
+        await interaction.edit_original_response(content="Error playing the song")
         return None
     return None
 
@@ -500,11 +521,19 @@ async def disconnect(interaction: discord.Interaction) -> None:
     guild_music_hndlr = await bot.musicHandlerPool.get(guild_id)
 
     if guild_music_hndlr is None:
-        vc = await get_voice_client(interaction, quiet=True)
+        # don't use get_voice_client here: it would *connect* first
+        vc = interaction.guild.voice_client if interaction.guild else None
         if vc is not None:
-            await vc.disconnect()
+            await vc.disconnect(force=False)
+            await interaction.response.send_message("Disconnected", ephemeral=True)
+        else:
+            await interaction.response.send_message(
+                "I'm not in a voice channel", ephemeral=True
+            )
         return
     await guild_music_hndlr.disconnect(interaction=interaction)
+    await bot.musicHandlerPool.delete(guild_id)
+    await bot.idleChecker.deinit_idlestate_of_client(guild_id)
 
 
 @bot.tree.command(name="status", description="show the current status of the bot")
@@ -541,17 +570,21 @@ async def on_ready():
         print("Bot is not logged in")
         exit(1)
     print(f"Logged in as {bot.user} (ID: {bot.user.id})")
-    bot_commands = await bot.tree.sync()
-    print("Command tree synced with Discord")
+    # on_ready fires again after reconnects; only sync / start the loop once.
+    # (a 2nd idle loop made idle timers count down twice as fast)
+    if not bot.tree_synced:
+        bot_commands = await bot.tree.sync()
+        bot.tree_synced = True
+        print("Command tree synced with Discord")
+        print(" all commands")
+        print(bot_commands)
     print("------ Bot is ready ------")
-    print(" all commands")
-    print(bot_commands)
-    print("------")
 
     game = discord.Game("with the variables and processes")
     await bot.change_presence(status=discord.Status.idle, activity=game)
 
-    await bot.idleChecker.run_idle_loop()
+    if bot.idle_task is None or bot.idle_task.done():
+        bot.idle_task = asyncio.create_task(bot.idleChecker.run_idle_loop())
 
 
 @bot.event
@@ -561,6 +594,10 @@ async def on_error(event: EventItem, *args: Iterable[Any], **kwargs: dict[Any, A
 
 async def main():
     bot_token = get_env("DCBOT_TOKEN", ".env")
+    if not bot_token:
+        raise SystemExit(
+            "DCBOT_TOKEN is not set (environment variable or .env file)"
+        )
     async with bot:
         await bot.add_cog(Manage(bot))
         await bot.start(bot_token)
