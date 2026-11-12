@@ -1,8 +1,10 @@
 import asyncio
 from dataclasses import dataclass
+
 import discord
-from muscpy.utils import SharedDict
+
 from muscpy.config import IDLE_CHECK_TIMEOUT, IDLE_TIMEOUT
+from muscpy.utils import SharedDict
 from muscpy.yt_dlp_streamer import YTDLHandler
 
 

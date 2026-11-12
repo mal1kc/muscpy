@@ -1,29 +1,19 @@
 from __future__ import annotations
 
-
 # pyright: reportPrivateUsage=warning, reportMissingTypeStubs=false,reportAttributeAccessIssue=false
-
 # pyright: basic
-
 import asyncio
-
 from collections.abc import AsyncGenerator, Coroutine, Iterable
-
 from dataclasses import dataclass
-
 from sys import stderr
-
 from typing import Any, override
-
 from urllib.parse import urlparse
 
-
 import discord
-
 import discord.ext.commands
+from yt_dlp import YoutubeDL
 
 from muscpy.utils import SharedList
-from yt_dlp import YoutubeDL
 
 try:
     # newer yt-dlp moved std_headers out of the top-level package
@@ -176,7 +166,7 @@ class Track:
             .add_field(name="Length", value=f"{self.length}s")
         )
         if position:
-            embed = embed.add_field(name="Position", value="{:.2f}".format(position))
+            embed = embed.add_field(name="Position", value=f"{position:.2f}")
         if self.playlist_url:
             embed = embed.add_field(name="orginal playlist", value=self.playlist_url)
 
@@ -307,7 +297,7 @@ class YTDLHandler:
             new_trck = Track.from_dict(dict_data, fetch_sts=fetch_sts)
             print(f"{new_trck=}")
             return new_trck
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - one bad track must not stop playback
             print(
                 f"Failed to get track info: probably its not a url: {dict_data} with error: {e}"
             )
@@ -337,7 +327,7 @@ class YTDLHandler:
                             data_of_urls, fetch_sts=True
                         ):
                             yield nw_track, False
-                    except Exception as e:
+                    except Exception as e:  # noqa: BLE001 - one bad track must not stop playback
                         print(
                             f"Failed to get track info: probably its not a url: {url} with error: {e}"
                         )
@@ -355,7 +345,7 @@ class YTDLHandler:
                                 entry, fetch_sts=False
                             ):
                                 yield nw_track, True
-                        except Exception as e:
+                        except Exception as e:  # noqa: BLE001 - one bad track must not stop playback
                             print(
                                 f"Failed to get track info: probably its not a url: {entry} with error: {e}"
                             )
@@ -391,7 +381,7 @@ class YTDLHandler:
     @staticmethod
     async def get_new_stream_url(original_url) -> str | None:
         loop = asyncio.get_event_loop()
-        if any([invalid in original_url for invalid in ["Unknown"]]):
+        if "Unknown" in original_url:
             return
         with YoutubeDL(ytldl_single_url_options) as ytdl:
             print(f"getting new stream for {original_url=}")
@@ -534,11 +524,10 @@ class YTDLHandler:
             self.active_track.data_url is None
             or "Unknown" in self.active_track.data_url
             or not self.active_track.fetched
-        ):
-            if not await self.active_track.fetch():
-                await self._safe_edit(interaction, "have some struggles with youtube")
-                # skip the broken track instead of feeding ffmpeg a bad url
-                return await self.play_next(interaction)
+        ) and not await self.active_track.fetch():
+            await self._safe_edit(interaction, "have some struggles with youtube")
+            # skip the broken track instead of feeding ffmpeg a bad url
+            return await self.play_next(interaction)
 
         for attempt in range(2):
             try:
@@ -553,7 +542,7 @@ class YTDLHandler:
                     self.active_playback,
                     after=lambda e: self._play_next(interaction, e),
                 )
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 - one bad track must not stop playback
                 print(f"Failed to play track (attempt {attempt + 1}): {e}")
                 if attempt == 0:
                     await self._safe_edit(
@@ -710,7 +699,7 @@ class YTDLHandler:
             pos = None
             try:
                 pos = self.voice_client.timestamp / 1000000  # pyright: ignore[reportAttributeAccessIssue]
-            except Exception as e:
+            except (AttributeError, TypeError) as e:
                 print(f"{e=} on timestamp calc")
 
             embed_msg = self.active_track.msg_embed(

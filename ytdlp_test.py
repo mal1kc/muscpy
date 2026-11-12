@@ -1,8 +1,8 @@
 # pyright: basic
 from pprint import pprint
 from typing import Any
-from yt_dlp import YoutubeDL
 
+from yt_dlp import YoutubeDL
 
 common_ytdl_options = {
     "format": "bestaudio/best",

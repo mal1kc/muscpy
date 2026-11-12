@@ -26,12 +26,12 @@ A Discord music bot powered by Python, FFmpeg, and yt-dlp.
 
  you need to be have ffmpeg in PATH environment variable or where you run app
 
-##### Using Rye
+##### Using uv
 
 Run the bot from the directory where `pyproject.toml` is located:
 ```bash
-rye sync
-rye run python -m muscpy
+uv sync
+uv run python -m muscpy
 ```
 
 ##### Using Virtualenv

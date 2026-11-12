@@ -5,7 +5,7 @@ import re
 
 def get_all_envs(env_file_path: str) -> dict[str, str]:
     # KEY=value / KEY="value with spaces" / KEY='value'
-    pattern = re.compile(r"^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)=(\"[^\"]*\"|'[^']*'|\S*)", re.M)
+    pattern = re.compile(r"^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)=(\"[^\"]*\"|'[^']*'|\S*)", re.MULTILINE)
     envs: dict[str, str] = {}
 
     # Read from the .env file

@@ -1,4 +1,5 @@
 import asyncio
+import sys
 from collections.abc import Iterable
 from typing import Any
 
@@ -33,10 +34,10 @@ class MusicBot(commands.Bot):
         **kwargs: dict[str, Any],
     ):
         super().__init__(
+            *args,
             command_prefix="!0_",
             description=description,
             intents=intents,
-            *args,
             **kwargs,
         )
         self.musicHandlerPool: SharedDict[str, YTDLHandler] = SharedDict()
@@ -87,15 +88,14 @@ async def join_vc(
     if await not_guild(interaction):
         return None
 
-    if channel is None:
-        if isinstance(interaction.user, Member):
-            if interaction.user.voice is None:
-                await interaction.response.send_message(
-                    "You are not connected to a voice channel.", ephemeral=True
-                )
-                return None
-            if isinstance(interaction.user.voice.channel, VoiceChannel):
-                channel = interaction.user.voice.channel
+    if channel is None and isinstance(interaction.user, Member):
+        if interaction.user.voice is None:
+            await interaction.response.send_message(
+                "You are not connected to a voice channel.", ephemeral=True
+            )
+            return None
+        if isinstance(interaction.user.voice.channel, VoiceChannel):
+            channel = interaction.user.voice.channel
 
     if not isinstance(channel, discord.VoiceChannel):
         await interaction.response.send_message(
@@ -148,7 +148,7 @@ async def join_vc(
             "I don't have permission to join the voice channel.", ephemeral=True
         )
         return None
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - report to user instead of crashing the command
         await interaction.response.send_message(
             f"An error occurred: {e}", ephemeral=True
         )
@@ -298,8 +298,7 @@ class Manage(commands.Cog):
                 content="You can only delete up to 100 messages at a time."
             )
             return
-        if limit < 1:
-            limit = 1
+        limit = max(limit, 1)
 
         try:
             # purge() handles bulk-delete limits (e.g. messages older than 14 days)
@@ -350,7 +349,7 @@ async def play(
     edit_msg: bool = False,
 ) -> None:
     if await not_guild(interaction):
-        return None
+        return
     guild_id = str(interaction.guild_id)  # type: ignore
 
     # Defer before anything slow (voice connect, yt-dlp). After this the
@@ -361,7 +360,7 @@ async def play(
 
     try:
         voice_client = await get_voice_client(interaction, voice_ch, quiet=True)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - report to user instead of crashing the command
         print(f"voice connect error: {e!r}")
         voice_client = None
 
@@ -369,7 +368,7 @@ async def play(
         await interaction.edit_original_response(
             content="I have issues connecting to the voice channel"
         )
-        return None
+        return
 
     guild_music_hndlr = await bot.musicHandlerPool.get(guild_id)
     query_or_url = query_or_url.strip() if query_or_url is not None else None
@@ -377,11 +376,11 @@ async def play(
     if guild_music_hndlr is None:
         try:
             guild_music_hndlr = YTDLHandler(bot=bot, voice_client=voice_client)  # type: ignore
-        except Exception:
+        except Exception:  # noqa: BLE001 - report to user instead of crashing the command
             await interaction.edit_original_response(
                 content="Error initializing music handler"
             )
-            return None
+            return
         await bot.musicHandlerPool.set(guild_id, guild_music_hndlr)
 
     if not guild_music_hndlr.voice_client.is_connected():  # pyright: ignore[reportAttributeAccessIssue,reportUnknownMemberType]
@@ -399,17 +398,17 @@ async def play(
     # from now on we edit the message instead responding
     try:
         await guild_music_hndlr.play(interaction=interaction, query_or_url=query_or_url)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - report to user instead of crashing the command
         print(f"play error: {e!r}")
         await interaction.edit_original_response(content="Error playing the song")
-        return None
-    return None
+        return
+    return
 
 
 @bot.tree.command(name="stop", description="stop song and clear the queue")
 async def stop(interaction: discord.Interaction) -> None:
     if await not_guild(interaction):
-        return None
+        return
     guild_id = str(interaction.guild_id)  # type: ignore
 
     guild_music_hndlr = await bot.musicHandlerPool.get(guild_id)
@@ -422,7 +421,7 @@ async def stop(interaction: discord.Interaction) -> None:
 @bot.tree.command(name="pause", description="pause the current song")
 async def pause(interaction: discord.Interaction) -> None:
     if await not_guild(interaction):
-        return None
+        return
     guild_id = str(interaction.guild_id)
 
     guild_music_hndlr = await bot.musicHandlerPool.get(guild_id)
@@ -436,7 +435,7 @@ async def pause(interaction: discord.Interaction) -> None:
 @bot.tree.command(name="resume", description="resume the current song")
 async def resume(interaction: discord.Interaction) -> None:
     if await not_guild(interaction):
-        return None
+        return
     guild_id = str(interaction.guild_id)
 
     guild_music_hndlr = await bot.musicHandlerPool.get(guild_id)
@@ -461,7 +460,7 @@ async def skip(interaction: discord.Interaction, count: int | None) -> None:
     """
 
     if await not_guild(interaction):
-        return None
+        return
     guild_id = str(interaction.guild_id)
 
     guild_music_hndlr = await bot.musicHandlerPool.get(guild_id)
@@ -474,7 +473,7 @@ async def skip(interaction: discord.Interaction, count: int | None) -> None:
 
 async def set_loop(interaction: discord.Interaction, loop: bool) -> None:
     if await not_guild(interaction):
-        return None
+        return
     guild_id = str(interaction.guild_id)
 
     guild_music_hndlr = await bot.musicHandlerPool.get(guild_id)
@@ -499,7 +498,7 @@ async def unloop(interaction: discord.Interaction) -> None:
 @bot.tree.command(name="queue", description="show the current queue")
 async def queue(interaction: discord.Interaction) -> None:
     if await not_guild(interaction):
-        return None
+        return
     guild_id = str(interaction.guild_id)
 
     guild_music_hndlr = await bot.musicHandlerPool.get(guild_id)
@@ -515,7 +514,7 @@ async def queue(interaction: discord.Interaction) -> None:
 )
 async def disconnect(interaction: discord.Interaction) -> None:
     if await not_guild(interaction):
-        return None
+        return
     guild_id = str(interaction.guild_id)
 
     guild_music_hndlr = await bot.musicHandlerPool.get(guild_id)
@@ -539,7 +538,7 @@ async def disconnect(interaction: discord.Interaction) -> None:
 @bot.tree.command(name="status", description="show the current status of the bot")
 async def status(interaction: discord.Interaction) -> None:
     if await not_guild(interaction):
-        return None
+        return
     guild_id = str(interaction.guild_id)
 
     guild_music_hndlr = await bot.musicHandlerPool.get(guild_id)
@@ -553,7 +552,7 @@ async def status(interaction: discord.Interaction) -> None:
 @bot.tree.command(name="clear", description="clear the current queue")
 async def clear(interaction: discord.Interaction) -> None:
     if await not_guild(interaction):
-        return None
+        return
     guild_id = str(interaction.guild_id)
 
     guild_music_hndlr = await bot.musicHandlerPool.get(guild_id)
@@ -568,7 +567,7 @@ async def clear(interaction: discord.Interaction) -> None:
 async def on_ready():
     if bot.user is None:
         print("Bot is not logged in")
-        exit(1)
+        sys.exit(1)
     print(f"Logged in as {bot.user} (ID: {bot.user.id})")
     # on_ready fires again after reconnects; only sync / start the loop once.
     # (a 2nd idle loop made idle timers count down twice as fast)

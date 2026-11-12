@@ -6,8 +6,8 @@ authors = [
     { name = "mal1kc" }
 ]
 dependencies = [
-    "yt-dlp>=2024.8.6",
-    "discord-py[voice]>=2.4.0",
+    "yt-dlp>=2026.10.26",
+    "discord-py[voice]>=2.7.1",
 ]
 readme = "readme.md"
 requires-python = ">= 3.12"
@@ -16,10 +16,9 @@ requires-python = ">= 3.12"
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
-[tool.rye]
-managed = true
-dev-dependencies = [
-    "ruff>=0.5"
+[dependency-groups]
+dev = [
+    "ruff>=0.17.4",
 ]
 
 [tool.hatch.metadata]
@@ -47,3 +46,8 @@ packages = ["src/muscpy"]
 # [build-system]
 # requires = ["poetry-core"]
 # build-backend = "poetry.core.masonry.api"
+
+[tool.ruff.lint]
+# git tracks these files as 0644, but on filesystems without POSIX modes
+# (e.g. NTFS/exFAT mounts) every file shows up as executable.
+extend-ignore = ["EXE002"]

@@ -1,14 +1,10 @@
 import asyncio
 from collections.abc import AsyncIterator
-from typing import Generic, TypeVar
 
 import discord
 
-pool_K = TypeVar("pool_K")
-pool_V = TypeVar("pool_V")
 
-
-class SharedDict(Generic[pool_K, pool_V]):
+class SharedDict[pool_K, pool_V]:
     def __init__(self) -> None:
         self._lock = asyncio.Lock()
         self._pool: dict[pool_K, pool_V] = {}
@@ -32,7 +28,7 @@ class SharedDict(Generic[pool_K, pool_V]):
                 yield (key, value)
 
 
-class SharedList(Generic[pool_V]):
+class SharedList[pool_V]:
     def __init__(self) -> None:
         super().__init__()
         self._lock = asyncio.Lock()
@@ -102,12 +98,13 @@ async def get_voice_client(
     voice_ch: discord.VoiceChannel | None = None,
     quiet: bool = True,
 ) -> discord.VoiceClient | discord.VoiceProtocol | None:
-    if voice_ch is None:
-        if isinstance(interaction.user, discord.Member):
-            if isinstance(
-                interaction.user.voice, discord.VoiceState
-            ) and not isinstance(interaction.user.voice.channel, discord.StageChannel):
-                voice_ch = interaction.user.voice.channel
+    if (
+        voice_ch is None
+        and isinstance(interaction.user, discord.Member)
+        and isinstance(interaction.user.voice, discord.VoiceState)
+        and not isinstance(interaction.user.voice.channel, discord.StageChannel)
+    ):
+        voice_ch = interaction.user.voice.channel
 
     if voice_ch is None:
         if not quiet:
@@ -139,6 +136,5 @@ async def get_voice_client(
 
 
 def get_txt_channel(interaction: discord.Interaction) -> discord.TextChannel | None:
-    if interaction.channel:
-        if interaction.channel.type == discord.ChannelType.text:
+    if interaction.channel and interaction.channel.type == discord.ChannelType.text:
             return interaction.channel

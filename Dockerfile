@@ -1,42 +1,36 @@
-# Stage 1: Build Stage for Python Application
-FROM python:3.12-slim AS builder
+# Stage 1: Build Stage: install dependencies with uv from the lockfile
+FROM python:3.13-slim AS builder
 
-# Set the working directory
+COPY --from=ghcr.io/astral-sh/uv:0.13.7 /uv /bin/uv
+
+ENV UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy \
+    UV_PYTHON_DOWNLOADS=never
+
 WORKDIR /app
 
-# Install build dependencies and upgrade pip in a single layer
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    && pip install --upgrade pip \
-    && apt-get clean && rm -rf /var/lib/apt/lists/*
+# Install dependencies first (cached unless the lockfile changes)
+COPY pyproject.toml uv.lock ./
+RUN uv sync --locked --no-dev --no-install-project
 
-# Copy the necessary files for installation
-COPY requirements.txt setup.py pyproject.toml ./
+# Install the project itself
+COPY readme.md start_muscpy.py ./
 COPY src/ ./src/
-COPY readme.md .
-COPY start_muscpy.py .
-
-# Install dependencies
-RUN pip install --no-cache-dir -r requirements.txt && \
-    pip install --no-cache-dir .
+RUN uv sync --locked --no-dev --no-editable
 
 # Stage 2: Runtime Stage with FFmpeg
-FROM python:3.12-slim
+FROM python:3.13-slim
 
-# Install FFmpeg in a single layer and clean up
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
-    && apt-get clean && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/*
 
-# Set the working directory
 WORKDIR /app
 
-# Copy only the necessary files from the builder stage
-COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
+COPY --from=builder /app/.venv /app/.venv
 COPY --from=builder /app/start_muscpy.py .
-COPY --from=builder /app/src ./src
-COPY --from=builder /app/readme.md .
 
-# Command to run the script
+ENV PATH="/app/.venv/bin:$PATH" \
+    PYTHONUNBUFFERED=1
+
 CMD ["python3", "start_muscpy.py"]
-
