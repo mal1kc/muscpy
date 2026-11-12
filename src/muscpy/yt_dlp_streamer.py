@@ -25,7 +25,11 @@ import discord.ext.commands
 from muscpy.utils import SharedList
 from yt_dlp import YoutubeDL
 
-from yt_dlp import std_headers as ytdl_headers
+try:
+    # newer yt-dlp moved std_headers out of the top-level package
+    from yt_dlp.utils.networking import std_headers as ytdl_headers
+except ImportError:  # older yt-dlp
+    from yt_dlp import std_headers as ytdl_headers  # pyright: ignore
 
 from yt_dlp.utils.networking import random_user_agent
 
@@ -49,10 +53,11 @@ class PlayButton(discord.ui.Button["PlayButtonView"]):
         )
 
         if not hasattr(self.ytdl_handler, "handle_track"):
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 "Internal error: Handler does not have handle_track method",
                 ephemeral=True,
             )
+            return
 
         await self.ytdl_handler.handle_track(interaction, self.track)
 
@@ -65,8 +70,9 @@ class PlayButtonView(discord.ui.View):
         self.trk_list: list[str] = []
 
         for indx, track in enumerate(tracks, 0):
+            # parenthesised: the index was dropped for untitled tracks
             _ = self.trk_list.append(
-                f"{indx}. " + track.title[:70] if track.title else "Unknown Title"
+                f"{indx}. " + (track.title[:70] if track.title else "Unknown Title")
             )
             _ = self.add_item(PlayButton(ytdl_handler, track, indx))
 
@@ -79,7 +85,7 @@ common_ytdl_options = {
     "outtmpl": "%(extractor)s-%(id)s-%(title)s.%(ext)s",
     "restrictfilenames": True,
     "geo_bypass": True,
-    "nocheckcertificate": True,
+    "nocheckcertificate": False,
     "ignoreerrors": False,
     "logtostderr": False,
     "quiet": False,
@@ -114,6 +120,22 @@ ffmpeg_options = {
     "options": "-vn",
     "before_options": "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
 }
+
+
+def format_queue(queue: Iterable[Track], limit: int = 1024) -> str:
+    """Numbered queue listing that fits in one embed field (max 1024 chars)."""
+    lines: list[str] = []
+    tracks = list(queue)
+    used = 0
+    for i, track in enumerate(tracks):
+        line = f"{i + 1}. {(track.title or 'Unknown')[:80]}"
+        more = f"... and {len(tracks) - i} more"
+        if used + len(line) + 1 + len(more) > limit:
+            lines.append(more)
+            break
+        lines.append(line)
+        used += len(line) + 1
+    return "\n".join(lines) or "Empty"
 
 
 @dataclass
@@ -159,12 +181,7 @@ class Track:
             embed = embed.add_field(name="orginal playlist", value=self.playlist_url)
 
         if queue:
-            embed = embed.add_field(
-                name="Queue",
-                value="\n".join(
-                    [f"{i+1}. {track.title}" for i, track in enumerate(queue)]
-                ),
-            )
+            embed = embed.add_field(name="Queue", value=format_queue(queue))
 
         return embed
 
@@ -205,24 +222,25 @@ class Track:
     async def fetch(self):
         print(f"fetch_called for {self.original_url} {self.data_url}")
         loop = asyncio.get_event_loop()
+        # prefer the page url: stream urls (data_url) expire
+        if self.original_url and self.original_url != "Unknown":
+            source_url = self.original_url
+        elif self.data_url and self.data_url != "Unknown":
+            source_url = self.data_url
+        else:
+            return False
         with YoutubeDL(ytldl_single_url_options) as ytdl:
-            if self.original_url is None or "" == self.original_url:
-                data = await loop.run_in_executor(
-                    None,
-                    lambda: ytdl.extract_info(self.original_url, download=False),
-                )
-            elif self.data_url is None or "" == self.original_url:
-                return None
-            else:
-                self.original_url = self.data_url
-                data = await loop.run_in_executor(
-                    None,
-                    lambda: ytdl.extract_info(self.data_url, download=False),
-                )
+            data = await loop.run_in_executor(
+                None,
+                lambda: ytdl.extract_info(source_url, download=False),
+            )
             if data is None:
-                return
-            if "enttries" in data:
-                data = data["entries"][0]
+                return False
+            if "entries" in data:
+                entries = [e for e in data["entries"] if e]
+                if not entries:
+                    return False
+                data = entries[0]
             if isinstance(data, dict):
                 self.original_url = data.get("original_url", self.original_url)  # pyright: ignore
                 self.data_url = data["url"]  # pyright: ignore
@@ -254,6 +272,8 @@ class YTDLHandler:
         self.active_playback = None
 
         self.loop = False
+
+        self.paused = False
 
     async def tracks_from_search(self, query: str):
         """
@@ -357,21 +377,16 @@ class YTDLHandler:
                             )
 
         if secondary_plist_url:
-            results_for_single = None
+            # watch?v=X&list=Y: first the video itself, then the playlist
             if isinstance(secondary_plist_first_track, str):
-                results_for_single = (
-                    result
-                    async for result in YTDLHandler.generate_track_or_que_urls(
-                        secondary_plist_first_track
-                    )
-                )
-            for tasks in [
-                results_for_single,
-                YTDLHandler.generate_track_or_que_urls(secondary_plist_url),
-            ]:
-                if tasks:
-                    for task in tasks:
-                        yield task
+                async for result in YTDLHandler.generate_track_or_que_urls(
+                    secondary_plist_first_track
+                ):
+                    yield result
+            async for result in YTDLHandler.generate_track_or_que_urls(
+                secondary_plist_url
+            ):
+                yield result
 
     @staticmethod
     async def get_new_stream_url(original_url) -> str | None:
@@ -386,8 +401,11 @@ class YTDLHandler:
             )
             if data is None:
                 return
-            if "enttries" in data:
-                raise NotImplementedError("f")
+            if "entries" in data:
+                entries = [e for e in data["entries"] if e]
+                if not entries:
+                    return None
+                data = entries[0]
             if isinstance(data, dict):
                 new_url = data.get("url", None)
                 if new_url:
@@ -451,7 +469,7 @@ class YTDLHandler:
             if is_plist:
                 counter += 1
 
-                if counter >= 100:
+                if counter > 100:
                     await interaction.edit_original_response(
                         content="Playlist is too large, only the first 100 tracks have been added."
                     )
@@ -518,74 +536,64 @@ class YTDLHandler:
             or not self.active_track.fetched
         ):
             if not await self.active_track.fetch():
-                await interaction.edit_original_response(
-                    content="have some struggles with youtube"
-                )
+                await self._safe_edit(interaction, "have some struggles with youtube")
+                # skip the broken track instead of feeding ffmpeg a bad url
+                return await self.play_next(interaction)
 
-        self.active_playback = discord.FFmpegPCMAudio(
-            self.active_track.data_url,
-            pipe=False,
-            stderr=stderr.buffer,
-            **ffmpeg_options,
-        )
-        try:
-            self.voice_client.play(  # pyright: ignore[reportAttributeAccessIssue]
-                self.active_playback, after=lambda e: self._play_next(interaction, e)
-            )
-
-            self.paused = False
-
-            await interaction.edit_original_response(
-                content=f"Playing: {self.active_track.title}"
-            )
-
-        except Exception as e:
-            print(f"Failed to play track: {e}")
-            asyncio.run(
-                interaction.edit_original_response(
-                    content="have networking issue retrying"
-                )
-            )
-
-            if "http" in str(e):
-                await self.active_track.fetch()
+        for attempt in range(2):
             try:
+                # a fresh source each attempt: a failed one can't be reused
+                self.active_playback = discord.FFmpegPCMAudio(
+                    self.active_track.data_url,
+                    pipe=False,
+                    stderr=stderr.buffer,
+                    **ffmpeg_options,
+                )
                 self.voice_client.play(  # pyright: ignore[reportAttributeAccessIssue]
                     self.active_playback,
                     after=lambda e: self._play_next(interaction, e),
                 )
-
-                self.paused = False
-
-                await interaction.edit_original_response(
-                    content=f"Playing: {self.active_track.title}"
-                )
-
             except Exception as e:
-                print(f"Failed to play track after refreshing data URL: {e}")
-            else:
-                await interaction.edit_original_response(
-                    content="Failed to play track."
-                )
+                print(f"Failed to play track (attempt {attempt + 1}): {e}")
+                if attempt == 0:
+                    await self._safe_edit(
+                        interaction, "have networking issue retrying"
+                    )
+                    await self.active_track.fetch()
+                    continue
+                await self._safe_edit(interaction, "Failed to play track.")
+                return
+            self.paused = False
+            await self._safe_edit(
+                interaction, f"Playing: {self.active_track.title}"
+            )
+            return
+
+    @staticmethod
+    async def _safe_edit(interaction: discord.Interaction, content: str) -> None:
+        # interaction tokens expire after 15 minutes; a long queue outlives them
+        try:
+            await interaction.edit_original_response(content=content)
+        except discord.HTTPException as e:
+            print(f"could not edit interaction message: {e}")
 
     def _play_next(self, interaction: discord.Interaction, error):
+        # called by discord.py from the audio player thread
         if error:
-            asyncio.run(
-                interaction.edit_original_response(
-                    content="probably networking (youtube) issue"
-                )
-            )
             print(f"Player error: {error}")
+        asyncio.run_coroutine_threadsafe(
+            self._after_track(interaction, error), self.bot.loop
+        )
 
+    async def _after_track(self, interaction: discord.Interaction, error) -> None:
+        if error:
+            await self._safe_edit(interaction, "probably networking (youtube) issue")
+        # re-queue first, then check the queue, in one coroutine; before, the
+        # emptiness check could run before the append and looping stopped
         if self.loop and self.active_track:
-            _ = asyncio.run_coroutine_threadsafe(
-                self.queue.append(self.active_track), self.bot.loop
-            )
-
+            await self.queue.append(self.active_track)
         if self.queue:
-            asyncio.run_coroutine_threadsafe(
-                self.play_next(interaction=interaction), self.bot.loop
-            )
+            await self.play_next(interaction=interaction)
 
     async def pause(self, interaction: discord.Interaction):
         if self.voice_client.is_playing():  # pyright: ignore[reportAttributeAccessIssue]
@@ -625,14 +633,11 @@ class YTDLHandler:
         self,
         interaction: discord.Interaction | None = None,
     ):
+        await self.queue.clear()
         if self.voice_client.is_playing() or self.voice_client.is_paused():  # pyright: ignore[reportAttributeAccessIssue]
-            self.voice_client.stop()  # pyright: ignore[reportAttributeAccessIssue]
-
-            await self.queue.clear()
-
-            self.paused = True
-
             self.active_track = None
+            self.paused = True
+            self.voice_client.stop()  # pyright: ignore[reportAttributeAccessIssue]
             if interaction:
                 await interaction.response.send_message("Stopped", ephemeral=True)
         else:
@@ -642,10 +647,8 @@ class YTDLHandler:
                 )
 
     async def skip(self, interaction: discord.Interaction, count: int | None):
-        if self.voice_client.is_playing():  # pyright: ignore[reportAttributeAccessIssue]
-            self.voice_client.stop()  # pyright: ignore[reportAttributeAccessIssue]
-
-            if count is None or count == 1:
+        if self.voice_client.is_playing() or self.voice_client.is_paused():  # pyright: ignore[reportAttributeAccessIssue]
+            if count is None or count == 1 or count == 0:
                 trk_title = "Unknown"
 
                 if self.active_track:
@@ -660,23 +663,26 @@ class YTDLHandler:
                 )
             else:
                 trk_titles: list[str] = []
+                # positive: current track + next (count-1) from the front
+                # negative: remove |count| tracks from the end of the queue
+                pop_index = 0 if count > 0 else -1
+                n_to_remove = count - 1 if count > 0 else -count
+                for _ in range(n_to_remove):
+                    skipped_trk = await self.queue.pop(pop_index)
+                    if skipped_trk is None:
+                        break
+                    trk_titles.append(skipped_trk.title or "Unknown")
 
-                if count > 0:
-                    element_range = range(count - 1)
-                else:
-                    element_range = range(len(self.queue) - 1, count, -1)
-                for indx in element_range:
-                    skipped_trk = await self.queue.pop(indx)
-                    if skipped_trk:
-                        trk_titles.append(f"{indx}. {skipped_trk.title or 'Unknown'}")
-
+                where = "first" if count > 0 else "last"
                 await interaction.response.send_message(
-                    f"first {count} items skipped from queuee \n"
-                    + "\n".join(trk_titles),
+                    f"{where} {abs(count)} items skipped from queue\n"
+                    + "\n".join(f"{i}. {t}" for i, t in enumerate(trk_titles, 1)),
                     ephemeral=True,
                 )
 
-            await self.play(interaction=interaction)
+            if count is None or count >= 0:
+                # the after-callback of stop() starts the next track
+                self.voice_client.stop()  # pyright: ignore[reportAttributeAccessIssue]
         else:
             await interaction.response.send_message(
                 "Player is not playing.", ephemeral=True
@@ -726,12 +732,7 @@ class YTDLHandler:
             embed = embed.add_field(
                 name="Currently playing",
                 value=self.active_track.title if self.active_track else "Nothing",
-            ).add_field(
-                name="Queue",
-                value="\n".join(
-                    [f"{i+1}. {track.title}" for i, track in enumerate(self.queue)]
-                ),
-            )
+            ).add_field(name="Queue", value=format_queue(self.queue))
         else:
             embed = embed.add_field(name="Queue", value="Empty")
 

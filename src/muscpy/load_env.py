@@ -4,7 +4,8 @@ import re
 
 
 def get_all_envs(env_file_path: str) -> dict[str, str]:
-    pattern = re.compile(r"([\S]+)=([\"'][\S]+[\"']|[\S]+)")
+    # KEY=value / KEY="value with spaces" / KEY='value'
+    pattern = re.compile(r"^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)=(\"[^\"]*\"|'[^']*'|\S*)", re.M)
     envs: dict[str, str] = {}
 
     # Read from the .env file
@@ -17,7 +18,7 @@ def get_all_envs(env_file_path: str) -> dict[str, str]:
                 splitted_env = i
             else:
                 splitted_env = i.split("=")
-            envs[splitted_env[0]] = splitted_env[1].strip('"')
+            envs[splitted_env[0]] = splitted_env[1].strip("\"'")
     except FileNotFoundError:
         print(
             f"Warning: The file {env_file_path} was not found. Proceeding with environment variables only."
@@ -26,7 +27,7 @@ def get_all_envs(env_file_path: str) -> dict[str, str]:
     return envs
 
 
-def get_env(env_name: str, env_file_path: str) -> str:
+def get_env(env_name: str, env_file_path: str) -> str | None:
     # First, check if the environment variable is set
     env_value = os.getenv(env_name)
     if env_value is not None:

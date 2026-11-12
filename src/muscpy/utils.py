@@ -38,20 +38,26 @@ class SharedList(Generic[pool_V]):
         self._lock = asyncio.Lock()
         self._pool: list[pool_V] = []
 
+    # asyncio.run() can't be called from inside the running event loop, so
+    # these sync accessors work on the list directly (single-threaded loop).
     def __getitem__(self, index: int) -> pool_V | None:
-        return asyncio.run(self.get(index))
+        try:
+            return self._pool[index]
+        except IndexError:
+            return None
 
     def __setitem__(self, index: int, value: pool_V):
-        asyncio.run(self.set(index, value))
+        self._pool[index] = value
 
-    def __delitem__(self, value: pool_V):
-        asyncio.run(self.remove(value))
+    def __delitem__(self, index: int):
+        del self._pool[index]
 
     def __len__(self) -> int:
         return len(self._pool)
 
     def __iter__(self):
-        return iter(self._pool)
+        # iterate over a snapshot so concurrent pops can't break iteration
+        return iter(list(self._pool))
 
     async def get(self, index: int) -> pool_V | None:
         async with self._lock:
