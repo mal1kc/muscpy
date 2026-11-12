@@ -74,4 +74,3 @@ uv run python -m muscpy
 - Double join VC messages.
 - Some unneeded messages.
 - Some messages may be unclear.
-
